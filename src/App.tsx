@@ -1,11 +1,12 @@
-import React, {FC, useEffect, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {ConnectStatus} from "./components/ConnectStatus";
 import {Console} from "./components/Console";
-import './App.css';
 import {OscClient} from "./components/OscClient";
 import {Button, Input} from 'antd';
+import {socket} from "./socket";
+import './App.css';
 
-let consoleInitial = [
+let terminalInitial = [
   `<br/>.##..##..##..##..##..##..##..##...####...##...##..##..##.`,
   `<br/>.##..##..###.##..##.##...###.##..##..##..##...##..###.##.`,
   `<br/>.##..##..##.###..####....##.###..##..##..##.#.##..##.###.`,
@@ -17,39 +18,62 @@ let consoleInitial = [
 ];
 
 function App() {
-  const [console, setConsole] = useState<string[]>(consoleInitial);
+  const [terminal, setTerminal] = useState<string[]>(terminalInitial);
+  const [localServerConnected, setLocalServerConnected] = useState<boolean>(false);
+
+  // handle connection with local server
+  useEffect(() => {
+    function onConnect() {
+      setLocalServerConnected(true);
+    }
+
+    function onDisconnect() {
+      setLocalServerConnected(false);
+    }
+
+    socket.connect();
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.disconnect();
+      setLocalServerConnected(false);
+    };
+  }, []);
 
   return (
-    <div className="App">
-      <div>
-        <ConnectStatus status={true} label={"local-server"} />
-        <ConnectStatus status={false} label={"dalle-mini-server"}/>
-      </div>
-      <div>
-        <Console content={console.reduce((a, b) => a + b, '')} />
-      </div>
-      <div>
-        <div style={{display: 'inline-block'}}>Auto request interval:</div>
-        <div style={{display: 'inline-block'}}>
-          <Input size='small' />
+      <div className="App">
+        <div>
+          <ConnectStatus status={localServerConnected} label={"local-server"}/>
+          <ConnectStatus status={false} label={"dalle-mini-server"}/>
         </div>
-        <div style={{display: 'inline-block'}}>hour(s).</div>
+        <div>
+          <Console content={terminal.reduce((a, b) => a + b, '')}/>
+        </div>
+        <div>
+          <div style={{display: 'inline-block'}}>Auto request interval:</div>
+          <div style={{display: 'inline-block'}}>
+            <Input size='small'/>
+          </div>
+          <div style={{display: 'inline-block'}}>hour(s).</div>
+        </div>
+        <div>
+          <Button disabled={false} type="primary">Start</Button>
+        </div>
+        <div>
+          <OscClient/>
+          <OscClient/>
+          <OscClient/>
+          <OscClient/>
+          <OscClient/>
+          <OscClient/>
+        </div>
+        <div>
+          <Button type="primary">Save</Button>
+        </div>
       </div>
-      <div>
-        <Button disabled={false} type="primary">Start</Button>
-      </div>
-      <div>
-        <OscClient/>
-        <OscClient/>
-        <OscClient/>
-        <OscClient/>
-        <OscClient/>
-        <OscClient/>
-      </div>
-      <div>
-        <Button type="primary">Save</Button>
-      </div>
-    </div>
   );
 }
 
