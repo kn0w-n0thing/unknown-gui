@@ -1,0 +1,11 @@
+.Console {
+    width: 60vw;
+    height: 40vh;
+    font-size: 16px;
+    font-family: "Lucida Console", Courier New, monospace;
+    background-color: rgb(32, 32, 32);
+    color: rgb(212, 255, 238);
+    border: 2px solid rgb(212, 255, 238);
+    overflow-y: scroll;
+    padding: 10px;
+}
