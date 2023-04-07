@@ -20,6 +20,8 @@ let terminalInitial = [
 function App() {
   const [terminal, setTerminal] = useState<string[]>(terminalInitial);
   const [localServerConnected, setLocalServerConnected] = useState<boolean>(false);
+  const [dalleConnected, setDalleConnected] = useState<boolean>(false);
+  const [awaitingServer, setAwaitingServer] = useState<boolean>(false);
 
   // handle connection with local server
   useEffect(() => {
@@ -43,37 +45,87 @@ function App() {
     };
   }, []);
 
+  // handle dalle server connection
+  useEffect(() => {
+    if (localServerConnected) {
+      socket.on('dalle-status', connected => {
+        setDalleConnected(connected);
+      });
+
+      socket.emit('dalle-status');
+    } else {
+      setDalleConnected(false);
+    }
+
+    return () => {
+      socket.off('dalle-status');
+    }
+  }, [localServerConnected]);
+
+  // handle events
+  useEffect(() => {
+    const terminalPrint = (message: string) => {
+      setTerminal([...terminal, '<br/>' + message + '<br/>']);
+
+      // set line number cached by the terminal
+      if (terminal.length > 1000) {
+        setTerminal(terminal.slice(1));
+      }
+    };
+
+    socket.on('gui-log', (message: string) => {
+      console.log('gui-log: ' + message);
+      terminalPrint(message);
+    });
+
+    socket.on('get-news-data', (result: boolean, message: string) => {
+      setAwaitingServer(false);
+      terminalPrint(message);
+    })
+
+    return () => {
+      socket.off('gui-log');
+    }
+  })
+
   return (
-      <div className="App">
-        <div>
-          <ConnectStatus status={localServerConnected} label={"local-server"}/>
-          <ConnectStatus status={false} label={"dalle-mini-server"}/>
-        </div>
-        <div>
-          <Console content={terminal.reduce((a, b) => a + b, '')}/>
-        </div>
-        <div>
-          <div style={{display: 'inline-block'}}>Auto request interval:</div>
-          <div style={{display: 'inline-block'}}>
-            <Input size='small'/>
-          </div>
-          <div style={{display: 'inline-block'}}>hour(s).</div>
-        </div>
-        <div>
-          <Button disabled={false} type="primary">Start</Button>
-        </div>
-        <div>
-          <OscClient/>
-          <OscClient/>
-          <OscClient/>
-          <OscClient/>
-          <OscClient/>
-          <OscClient/>
-        </div>
-        <div>
-          <Button type="primary">Save</Button>
-        </div>
+    <div className="App">
+      <div>
+        <ConnectStatus status={localServerConnected} label={"local-server"}/>
+        <ConnectStatus status={dalleConnected} label={"dalle-mini-server"}/>
       </div>
+      <div>
+        <Console content={terminal.reduce((a, b) => a + b, '')}/>
+      </div>
+      <div>
+        <div style={{display: 'inline-block'}}>Auto request interval:</div>
+        <div style={{display: 'inline-block'}}>
+          <Input size='small'/>
+        </div>
+        <div style={{display: 'inline-block'}}>hour(s).</div>
+      </div>
+      <div>
+        <Button disabled={!localServerConnected || !dalleConnected || awaitingServer}
+                type="primary"
+                onClick={() => {
+                  socket.emit('get-news-data');
+                  setAwaitingServer(true);
+                }}>
+          Start
+        </Button>
+      </div>
+      <div>
+        <OscClient/>
+        <OscClient/>
+        <OscClient/>
+        <OscClient/>
+        <OscClient/>
+        <OscClient/>
+      </div>
+      <div>
+        <Button type="primary">Save</Button>
+      </div>
+    </div>
   );
 }
 
