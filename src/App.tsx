@@ -2,7 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {ConnectStatus} from "./components/ConnectStatus";
 import {Console} from "./components/Console";
 import {OscClient} from "./components/OscClient";
-import {Button, Input} from 'antd';
+import {Button, Form, Input, InputNumber} from 'antd';
 import {socket} from "./socket";
 import './App.css';
 
@@ -22,11 +22,25 @@ function App() {
   const [localServerConnected, setLocalServerConnected] = useState<boolean>(false);
   const [dalleConnected, setDalleConnected] = useState<boolean>(false);
   const [awaitingServer, setAwaitingServer] = useState<boolean>(false);
+  const [oscClients, setOscClients] = useState<any[]>([{}]);
+
+  const [oscClientsForm] = Form.useForm();
+  const [requestForm] = Form.useForm();
+
+  const terminalPrint = (message: string) => {
+    setTerminal([...terminal, '<br/>' + message + '<br/>']);
+
+    // set line number cached by the terminal
+    if (terminal.length > 1000) {
+      setTerminal(terminal.slice(1));
+    }
+  };
 
   // handle connection with local server
   useEffect(() => {
     function onConnect() {
       setLocalServerConnected(true);
+      requestForm.setFieldsValue({requestInterval: 3});
     }
 
     function onDisconnect() {
@@ -52,27 +66,30 @@ function App() {
         setDalleConnected(connected);
       });
 
+      socket.on('load-osc-config', config => {
+        console.log(config);
+        const oscClients = JSON.parse(config);
+        setOscClients(oscClients);
+        oscClients.forEach((client: any) => {
+          oscClientsForm.setFieldsValue({[`ip-${client.id}`]: client.ip, [`port-${client.id}`]: client.port});
+        });
+      })
+
       socket.emit('dalle-status');
+      console.log('load-osc-config');
+      socket.emit('load-osc-config');
     } else {
       setDalleConnected(false);
     }
 
     return () => {
       socket.off('dalle-status');
+      socket.off('load-osc-config');
     }
   }, [localServerConnected]);
 
   // handle events
   useEffect(() => {
-    const terminalPrint = (message: string) => {
-      setTerminal([...terminal, '<br/>' + message + '<br/>']);
-
-      // set line number cached by the terminal
-      if (terminal.length > 1000) {
-        setTerminal(terminal.slice(1));
-      }
-    };
-
     socket.on('gui-log', (message: string) => {
       console.log('gui-log: ' + message);
       terminalPrint(message);
@@ -85,8 +102,50 @@ function App() {
 
     return () => {
       socket.off('gui-log');
+      socket.off('get-news-data');
     }
   })
+
+  const onRequestData = (value: any) => {
+    socket.emit('get-news-data');
+    setAwaitingServer(true);
+
+    let hour:number = value['requestInterval']
+    if (hour === undefined || hour <= 0) {
+      hour = 1;
+    }
+
+    terminalPrint('Emit get-news-data in ' + hour + " hour(s).");
+    setInterval(() => {
+      console.log('get-news-data');
+      socket.emit('get-news-data');
+      terminalPrint('Emit get-news-data in ' + hour + " hour(s).");
+    }, hour * 30 * 30 * 1000);
+  }
+
+  const onSaveOscConfig = (values: any) => {
+    let oscConfig: any = {};
+    for (let key in values) {
+      let res = key.split('-');
+      const configKey = res[res.length - 1];
+      let secondKey = res[0];
+      oscConfig[configKey] = {
+        ...oscConfig[configKey],
+        [secondKey]: values[key]
+      }
+    }
+
+    const params = [];
+    for (let v in oscConfig) {
+      params.push({
+        id: Number(v),
+        port: oscConfig[v]["port"],
+        ip: oscConfig[v]["ip"],
+      })
+    }
+    console.log(params);
+    socket.emit('save-osc-config', JSON.stringify(params));
+  }
 
   return (
     <div className="App">
@@ -97,34 +156,26 @@ function App() {
       <div>
         <Console content={terminal.reduce((a, b) => a + b, '')}/>
       </div>
-      <div>
+      <Form form={requestForm} onFinish={onRequestData}>
         <div style={{display: 'inline-block'}}>Auto request interval:</div>
-        <div style={{display: 'inline-block'}}>
-          <Input size='small'/>
-        </div>
+        <Form.Item name="requestInterval" style={{display: 'inline-block'}}>
+          <InputNumber  min={0} size='small'/>
+        </Form.Item>
         <div style={{display: 'inline-block'}}>hour(s).</div>
-      </div>
-      <div>
         <Button disabled={!localServerConnected || !dalleConnected || awaitingServer}
                 type="primary"
-                onClick={() => {
-                  socket.emit('get-news-data');
-                  setAwaitingServer(true);
-                }}>
+                htmlType="submit" >
           Start
         </Button>
-      </div>
-      <div>
-        <OscClient/>
-        <OscClient/>
-        <OscClient/>
-        <OscClient/>
-        <OscClient/>
-        <OscClient/>
-      </div>
-      <div>
-        <Button type="primary">Save</Button>
-      </div>
+      </Form>
+      <Form form={oscClientsForm} onFinish={onSaveOscConfig}>
+        {oscClients?.length && oscClients.map((v, i) => {
+          return <OscClient key={i} id={v?.id}/>
+        })}
+        <div>
+          <Button type="primary" htmlType="submit">Save</Button>
+        </div>
+      </Form>
     </div>
   );
 }
